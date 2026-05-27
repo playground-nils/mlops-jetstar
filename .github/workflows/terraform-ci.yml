@@ -1,151 +1,129 @@
-# This GitHub workflow tests and validates Terraform config (ML resource config and more)
-# defined under databricks-config, when PRs are merged into the main branch
 name: Terraform Tests for mlops-jetstar
-
-on:
-  workflow_dispatch:
+'on':
+  workflow_dispatch: null
   pull_request_target:
     paths:
-      - 'databricks-config/**'
-
+    - databricks-config/**
 defaults:
   run:
     working-directory: ./databricks-config
-
-# Code reference can be found at https://github.com/hashicorp/setup-terraform
 jobs:
   staging:
     concurrency: mlops-jetstar-staging-terraform-job
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       DATABRICKS_HOST: https://e2-demo-tokyo.cloud.databricks.com
       DATABRICKS_TOKEN: ${{secrets.STAGING_WORKSPACE_TOKEN}}
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: hashicorp/setup-terraform@v1
-      - name: Terraform fmt
-        id: fmt
-        run: terraform fmt -check -recursive -diff
-        continue-on-error: true
-      - name: Configure Terraform state backend authentication
-        run: |
-          # Below we assume you've run the setup scripts under the cicd-setup-scripts directory
-          # to create an AWS S3 bucket and IAM user with permission to access the bucket, and stored
-          # an access key for the IAM user as Github Actions secrets with
-          # name AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. We set corresponding environment variables to authenticate to
-          # the s3 backend as described in https://www.terraform.io/language/settings/backends/s3#credentials-and-shared-configuration
-          echo "AWS_ACCESS_KEY_ID=${{secrets.AWS_ACCESS_KEY_ID}}" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=${{secrets.AWS_SECRET_ACCESS_KEY}}" >> "$GITHUB_ENV"
-      - name: Terraform Init
-        id: init
-        run: terraform -chdir=staging init
-      - name: Terraform Validate
-        id: validate
-        run: terraform -chdir=staging validate -no-color
-      - name: Terraform Plan
-        id: plan
-        run: |
-          terraform -chdir=staging plan -no-color \
-          -var="git_repo_url=${{ github.server_url }}/${{ github.repository }}"
-      - name: Create Comment with Terraform Plan
-        uses: actions/github-script@v6
-        id: comment
-        env:
-          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const output = `#### Terraform Staging Format and Style 🖌 \`${{ steps.fmt.outcome }}\`
-            #### Terraform Staging Initialization ⚙️ \`${{ steps.init.outcome }}\`
-            #### Terraform Staging Validation 🤖 \`${{ steps.validate.outcome }}\`
-            <details><summary>Staging Validation Output</summary>
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    - uses: hashicorp/setup-terraform@v1
+    - name: Terraform fmt
+      id: fmt
+      run: terraform fmt -check -recursive -diff
+      continue-on-error: true
+    - name: Configure Terraform state backend authentication
+      run: '# Below we assume you''ve run the setup scripts under the cicd-setup-scripts
+        directory
 
-            \`\`\`\n
-            ${{ steps.validate.outputs.stdout }}
-            \`\`\`
+        # to create an AWS S3 bucket and IAM user with permission to access the bucket,
+        and stored
 
-            </details>
+        # an access key for the IAM user as Github Actions secrets with
 
-            #### Terraform Staging Plan 📖 \`${{ steps.plan.outcome }}\`
+        # name AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. We set corresponding environment
+        variables to authenticate to
 
-            <details><summary>Show Staging Plan</summary>
+        # the s3 backend as described in https://www.terraform.io/language/settings/backends/s3#credentials-and-shared-configuration
 
-            \`\`\`\n
-            ${process.env.PLAN}
-            \`\`\`
+        echo "AWS_ACCESS_KEY_ID=${{secrets.AWS_ACCESS_KEY_ID}}" >> "$GITHUB_ENV"
 
-            </details>`
+        echo "AWS_SECRET_ACCESS_KEY=${{secrets.AWS_SECRET_ACCESS_KEY}}" >> "$GITHUB_ENV"
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+        '
+    - name: Terraform Init
+      id: init
+      run: terraform -chdir=staging init
+    - name: Terraform Validate
+      id: validate
+      run: terraform -chdir=staging validate -no-color
+    - name: Terraform Plan
+      id: plan
+      run: 'terraform -chdir=staging plan -no-color \
+
+        -var="git_repo_url=${{ github.server_url }}/${{ github.repository }}"
+
+        '
+    - name: Create Comment with Terraform Plan
+      uses: actions/github-script@v6
+      id: comment
+      env:
+        PLAN: 'terraform
+
+          ${{ steps.plan.outputs.stdout }}'
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: "const output = `#### Terraform Staging Format and Style \U0001F58C\
+          \ \\`${{ steps.fmt.outcome }}\\`\n#### Terraform Staging Initialization\
+          \ \u2699\uFE0F \\`${{ steps.init.outcome }}\\`\n#### Terraform Staging Validation\
+          \ \U0001F916 \\`${{ steps.validate.outcome }}\\`\n<details><summary>Staging\
+          \ Validation Output</summary>\n\n\\`\\`\\`\\n\n${{ steps.validate.outputs.stdout\
+          \ }}\n\\`\\`\\`\n\n</details>\n\n#### Terraform Staging Plan \U0001F4D6\
+          \ \\`${{ steps.plan.outcome }}\\`\n\n<details><summary>Show Staging Plan</summary>\n\
+          \n\\`\\`\\`\\n\n${process.env.PLAN}\n\\`\\`\\`\n\n</details>`\n\ngithub.rest.issues.createComment({\n\
+          \  issue_number: context.issue.number,\n  owner: context.repo.owner,\n \
+          \ repo: context.repo.repo,\n  body: output\n})\n"
   prod:
     concurrency: mlops-jetstar-prod-terraform-job
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       DATABRICKS_HOST: https://cse2.cloud.databricks.com
       DATABRICKS_TOKEN: ${{secrets.PROD_WORKSPACE_TOKEN}}
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: hashicorp/setup-terraform@v1
-      - name: Terraform fmt
-        id: fmt
-        run: terraform fmt -check -recursive -diff
-        continue-on-error: true
-      - name: Configure Terraform state backend authentication
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${{secrets.AWS_ACCESS_KEY_ID}}" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=${{secrets.AWS_SECRET_ACCESS_KEY}}" >> "$GITHUB_ENV"
-      - name: Terraform Init
-        id: init
-        run: terraform -chdir=prod init
-      - name: Terraform Validate
-        id: validate
-        run: terraform -chdir=prod validate -no-color
-      - name: Terraform Plan
-        id: plan
-        run: |
-          terraform -chdir=prod plan -no-color \
-          -var="git_repo_url=${{ github.server_url }}/${{ github.repository }}"
-      - name: Create Comment with Terraform Plan
-        uses: actions/github-script@v6
-        id: comment
-        env:
-          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const output = `#### Terraform Prod Format and Style 🖌 \`${{ steps.fmt.outcome }}\`
-            #### Terraform Prod Initialization ⚙️ \`${{ steps.init.outcome }}\`
-            #### Terraform Prod Validation 🤖 \`${{ steps.validate.outcome }}\`
-            <details><summary>Prod Validation Output</summary>
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    - uses: hashicorp/setup-terraform@v1
+    - name: Terraform fmt
+      id: fmt
+      run: terraform fmt -check -recursive -diff
+      continue-on-error: true
+    - name: Configure Terraform state backend authentication
+      run: 'echo "AWS_ACCESS_KEY_ID=${{secrets.AWS_ACCESS_KEY_ID}}" >> "$GITHUB_ENV"
 
-            \`\`\`\n
-            ${{ steps.validate.outputs.stdout }}
-            \`\`\`
+        echo "AWS_SECRET_ACCESS_KEY=${{secrets.AWS_SECRET_ACCESS_KEY}}" >> "$GITHUB_ENV"
 
-            </details>
+        '
+    - name: Terraform Init
+      id: init
+      run: terraform -chdir=prod init
+    - name: Terraform Validate
+      id: validate
+      run: terraform -chdir=prod validate -no-color
+    - name: Terraform Plan
+      id: plan
+      run: 'terraform -chdir=prod plan -no-color \
 
-            #### Terraform Prod Plan 📖 \`${{ steps.plan.outcome }}\`
+        -var="git_repo_url=${{ github.server_url }}/${{ github.repository }}"
 
-            <details><summary>Show Prod Plan</summary>
+        '
+    - name: Create Comment with Terraform Plan
+      uses: actions/github-script@v6
+      id: comment
+      env:
+        PLAN: 'terraform
 
-            \`\`\`\n
-            ${process.env.PLAN}
-            \`\`\`
-
-            </details>`
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
+          ${{ steps.plan.outputs.stdout }}'
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: "const output = `#### Terraform Prod Format and Style \U0001F58C \\\
+          `${{ steps.fmt.outcome }}\\`\n#### Terraform Prod Initialization \u2699\uFE0F\
+          \ \\`${{ steps.init.outcome }}\\`\n#### Terraform Prod Validation \U0001F916\
+          \ \\`${{ steps.validate.outcome }}\\`\n<details><summary>Prod Validation\
+          \ Output</summary>\n\n\\`\\`\\`\\n\n${{ steps.validate.outputs.stdout }}\n\
+          \\`\\`\\`\n\n</details>\n\n#### Terraform Prod Plan \U0001F4D6 \\`${{ steps.plan.outcome\
+          \ }}\\`\n\n<details><summary>Show Prod Plan</summary>\n\n\\`\\`\\`\\n\n\
+          ${process.env.PLAN}\n\\`\\`\\`\n\n</details>`\n\ngithub.rest.issues.createComment({\n\
+          \  issue_number: context.issue.number,\n  owner: context.repo.owner,\n \
+          \ repo: context.repo.repo,\n  body: output\n})\n"
